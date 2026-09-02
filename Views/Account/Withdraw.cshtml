@@ -1,0 +1,39 @@
+@model AplikasiBanking8583.Models.Account
+
+@{
+    ViewData["Title"] = "Tarik Tunai";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-warning">
+                    <h4>Tarik Tunai - @Model.AccountNumber</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>Nama Pemilik:</strong> @Model.AccountHolderName<br />
+                        <strong>Saldo Saat Ini:</strong> Rp @Model.Balance.ToString("N2")
+                    </div>
+
+                    <form asp-action="Withdraw" method="post">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-3">
+                            <label class="form-label">Jumlah Tarik (Rp)</label>
+                            <input type="number" name="amount" class="form-control" required min="10000" step="1000" placeholder="Minimal Rp 10.000" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Deskripsi (Opsional)</label>
+                            <input type="text" name="description" class="form-control" placeholder="Tarik Tunai" />
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-warning">Tarik</button>
+                            <a asp-action="Index" class="btn btn-secondary">Kembali</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
