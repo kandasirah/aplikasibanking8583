@@ -1,0 +1,88 @@
+@model AplikasiBanking8583.Models.Account
+
+@{
+    ViewData["Title"] = "Hasil Cek Saldo";
+    var isoRequest = ViewBag.Iso8583Request as string;
+    var isoResponse = ViewBag.Iso8583Response as string;
+    var stan = ViewBag.Stan as string;
+    var rrn = ViewBag.Rrn as string;
+    var responseCode = ViewBag.ResponseCode as string;
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4>Hasil Cek Saldo ISO 8583</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-success">
+                        <h5>@Model.AccountNumber - @Model.AccountHolderName</h5>
+                        <hr />
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Saldo:</strong><br />
+                                <span class="h4 text-success">Rp @Model.Balance.ToString("N2")</span>
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Tipe Rekening:</strong><br />
+                                @Model.AccountType
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>Detail ISO 8583</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">MTI</div>
+                                <div class="col-md-8">0100 / 0110</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">STAN</div>
+                                <div class="col-md-8">@stan</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">RRN</div>
+                                <div class="col-md-8">@rrn</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">Response Code</div>
+                                <div class="col-md-8">
+                                    <span class="badge bg-success">@responseCode</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>ISO 8583 Request (0100)</h6>
+                        </div>
+                        <div class="card-body">
+                            <code class="d-block p-2 bg-light text-wrap" style="font-size: 0.8rem;">@isoRequest</code>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>ISO 8583 Response (0110)</h6>
+                        </div>
+                        <div class="card-body">
+                            <code class="d-block p-2 bg-light text-wrap" style="font-size: 0.8rem;">@isoResponse</code>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex">
+                        <a asp-action="BalanceInquiry" asp-route-id="@Model.Id" class="btn btn-info">Cek Lagi</a>
+                        <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-secondary">Detail Rekening</a>
+                        <a asp-action="Index" class="btn btn-secondary">Daftar Rekening</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

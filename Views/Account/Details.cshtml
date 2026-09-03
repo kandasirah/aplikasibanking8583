@@ -33,10 +33,11 @@
                         <div class="col-md-8">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
                     </div>
                     <div class="d-grid gap-2 d-md-flex">
+                        <a asp-action="BalanceInquiry" asp-route-id="@Model.Id" class="btn btn-info">Cek Saldo</a>
+                        <a asp-action="TransactionHistory" asp-route-id="@Model.Id" class="btn btn-dark">Riwayat</a>
                         <a asp-action="Deposit" asp-route-id="@Model.Id" class="btn btn-success">Setor</a>
                         <a asp-action="Withdraw" asp-route-id="@Model.Id" class="btn btn-warning">Tarik</a>
                         <a asp-action="Transfer" asp-route-id="@Model.Id" class="btn btn-primary">Transfer</a>
-                        <a asp-action="History" asp-route-id="@Model.Id" class="btn btn-secondary">Riwayat</a>
                         <a asp-action="Index" class="btn btn-secondary">Kembali</a>
                     </div>
                 </div>

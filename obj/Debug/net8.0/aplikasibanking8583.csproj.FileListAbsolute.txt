@@ -50,3 +50,4 @@ C:\Users\naraya\Desktop\aplikasibanking8583\bin\Debug\net8.0\Microsoft.OpenApi.d
 C:\Users\naraya\Desktop\aplikasibanking8583\bin\Debug\net8.0\Swashbuckle.AspNetCore.Swagger.dll
 C:\Users\naraya\Desktop\aplikasibanking8583\bin\Debug\net8.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\Users\naraya\Desktop\aplikasibanking8583\bin\Debug\net8.0\Swashbuckle.AspNetCore.SwaggerUI.dll
+c:\Users\naraya\Desktop\aplikasibanking8583\obj\Debug\net8.0\aplikasibanking8583.sourcelink.json

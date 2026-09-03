@@ -58,6 +58,57 @@ namespace AplikasiBanking8583.Models.ISO8583
             return response;
         }
 
+        public static Iso8583Message BuildBalanceInquiryResponse(Iso8583Message request, bool success, string responseCode, string accountNumber, decimal balance)
+        {
+            var response = new Iso8583Message("0110");
+
+            foreach (var kvp in request.DataElements)
+            {
+                response.DataElements[kvp.Key] = kvp.Value;
+            }
+
+            response.SetElement(39, responseCode);
+            response.SetElement(2, accountNumber.PadRight(19).Substring(0, 19));
+            response.SetElement(54, $"BAL:{balance:F2}");
+            response.SetElement(63, "INQUIRY");
+
+            return response;
+        }
+
+        public static Iso8583Message BuildAccountOpeningResponse(Iso8583Message request, bool success, string responseCode, string accountNumber, int accountId)
+        {
+            var response = new Iso8583Message("0110");
+
+            foreach (var kvp in request.DataElements)
+            {
+                response.DataElements[kvp.Key] = kvp.Value;
+            }
+
+            response.SetElement(39, responseCode);
+            response.SetElement(2, accountNumber.PadRight(19).Substring(0, 19));
+            response.SetElement(61, accountId.ToString());
+            response.SetElement(63, "ACCOUNT_OPENING");
+
+            return response;
+        }
+
+        public static Iso8583Message BuildTransactionHistoryResponse(Iso8583Message request, bool success, string responseCode, string accountNumber, int transactionCount)
+        {
+            var response = new Iso8583Message("0110");
+
+            foreach (var kvp in request.DataElements)
+            {
+                response.DataElements[kvp.Key] = kvp.Value;
+            }
+
+            response.SetElement(39, responseCode);
+            response.SetElement(2, accountNumber.PadRight(19).Substring(0, 19));
+            response.SetElement(61, transactionCount.ToString());
+            response.SetElement(63, "HISTORY_INQUIRY");
+
+            return response;
+        }
+
         public static string GetResponseCode(bool success, string? customCode = null)
         {
             if (!string.IsNullOrEmpty(customCode))

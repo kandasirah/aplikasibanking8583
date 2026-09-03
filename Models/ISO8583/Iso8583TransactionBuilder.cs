@@ -129,6 +129,86 @@ namespace AplikasiBanking8583.Models.ISO8583
             return response;
         }
 
+        public static Iso8583Message BuildBalanceInquiryMessage(Account account, string stan, string terminalId)
+        {
+            var mti = "0100";
+            var message = new Iso8583Message(mti);
+
+            message.SetElement(2, account.AccountNumber.PadRight(19).Substring(0, 19));
+            message.SetElement(3, "310000");
+            message.SetElement(7, DateTime.Now.ToString("MMddHHmmss"));
+            message.SetElement(11, stan.PadLeft(6, '0'));
+            message.SetElement(12, DateTime.Now.ToString("HHmmss"));
+            message.SetElement(13, DateTime.Now.ToString("MMdd"));
+            message.SetElement(17, DateTime.Now.ToString("MMdd"));
+            message.SetElement(22, "012");
+            message.SetElement(32, "1234567890");
+            message.SetElement(35, account.AccountNumber.PadRight(37).Substring(0, 37));
+            message.SetElement(37, Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper());
+            message.SetElement(41, terminalId.PadRight(8).Substring(0, 8));
+            message.SetElement(42, "BANKINGAPPSYS");
+            message.SetElement(43, "BANKING APPLICATION TERMINAL");
+            message.SetElement(49, "360");
+            message.SetElement(60, "INQUIRY");
+            message.SetElement(61, account.Id.ToString());
+
+            return message;
+        }
+
+        public static Iso8583Message BuildAccountOpeningMessage(Account account, string stan, string terminalId)
+        {
+            var mti = "0100";
+            var message = new Iso8583Message(mti);
+
+            message.SetElement(2, account.AccountNumber.PadRight(19).Substring(0, 19));
+            message.SetElement(3, "000000");
+            message.SetElement(7, DateTime.Now.ToString("MMddHHmmss"));
+            message.SetElement(11, stan.PadLeft(6, '0'));
+            message.SetElement(12, DateTime.Now.ToString("HHmmss"));
+            message.SetElement(13, DateTime.Now.ToString("MMdd"));
+            message.SetElement(17, DateTime.Now.ToString("MMdd"));
+            message.SetElement(22, "012");
+            message.SetElement(32, "1234567890");
+            message.SetElement(35, account.AccountNumber.PadRight(37).Substring(0, 37));
+            message.SetElement(37, Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper());
+            message.SetElement(41, terminalId.PadRight(8).Substring(0, 8));
+            message.SetElement(42, "BANKINGAPPSYS");
+            message.SetElement(43, "BANKING APPLICATION TERMINAL");
+            message.SetElement(49, "360");
+            message.SetElement(60, "ACCOUNT_OPENING");
+            message.SetElement(61, account.Id.ToString());
+            message.SetElement(63, $"NAME:{account.AccountHolderName}|TYPE:{account.AccountType}");
+
+            return message;
+        }
+
+        public static Iso8583Message BuildTransactionHistoryMessage(Account account, DateTime fromDate, DateTime toDate, string stan, string terminalId)
+        {
+            var mti = "0100";
+            var message = new Iso8583Message(mti);
+
+            message.SetElement(2, account.AccountNumber.PadRight(19).Substring(0, 19));
+            message.SetElement(3, "000000");
+            message.SetElement(7, DateTime.Now.ToString("MMddHHmmss"));
+            message.SetElement(11, stan.PadLeft(6, '0'));
+            message.SetElement(12, DateTime.Now.ToString("HHmmss"));
+            message.SetElement(13, DateTime.Now.ToString("MMdd"));
+            message.SetElement(17, DateTime.Now.ToString("MMdd"));
+            message.SetElement(22, "012");
+            message.SetElement(32, "1234567890");
+            message.SetElement(35, account.AccountNumber.PadRight(37).Substring(0, 37));
+            message.SetElement(37, Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper());
+            message.SetElement(41, terminalId.PadRight(8).Substring(0, 8));
+            message.SetElement(42, "BANKINGAPPSYS");
+            message.SetElement(43, "BANKING APPLICATION TERMINAL");
+            message.SetElement(49, "360");
+            message.SetElement(60, "HISTORY_INQUIRY");
+            message.SetElement(61, account.Id.ToString());
+            message.SetElement(62, $"FROM:{fromDate:yyyyMMdd}|TO:{toDate:yyyyMMdd}");
+
+            return message;
+        }
+
         public static string GenerateSTAN()
         {
             return Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper();

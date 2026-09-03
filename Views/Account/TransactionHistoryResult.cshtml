@@ -1,0 +1,125 @@
+@model AplikasiBanking8583.Models.Account
+@{
+    ViewData["Title"] = "Hasil Riwayat Transaksi";
+    var isoRequest = ViewBag.Iso8583Request as string;
+    var isoResponse = ViewBag.Iso8583Response as string;
+    var stan = ViewBag.Stan as string;
+    var rrn = ViewBag.Rrn as string;
+    var responseCode = ViewBag.ResponseCode as string;
+    var transactions = ViewBag.Transactions as List<AplikasiBanking8583.Models.Transaction>;
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4>Hasil Riwayat Transaksi ISO 8583</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>Rekening:</strong> @Model.AccountNumber - @Model.AccountHolderName<br />
+                        <strong>Total Transaksi:</strong> @(transactions?.Count ?? 0) records
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>Detail ISO 8583</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">MTI</div>
+                                <div class="col-md-8">0100 / 0110</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">STAN</div>
+                                <div class="col-md-8">@stan</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">RRN</div>
+                                <div class="col-md-8">@rrn</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-4 fw-bold">Response Code</div>
+                                <div class="col-md-8">
+                                    <span class="badge bg-success">@responseCode</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>ISO 8583 Request (0100)</h6>
+                        </div>
+                        <div class="card-body">
+                            <code class="d-block p-2 bg-light text-wrap" style="font-size: 0.8rem;">@isoRequest</code>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>ISO 8583 Response (0110)</h6>
+                        </div>
+                        <div class="card-body">
+                            <code class="d-block p-2 bg-light text-wrap" style="font-size: 0.8rem;">@isoResponse</code>
+                        </div>
+                    </div>
+
+                    @if (transactions != null && transactions.Any())
+                    {
+                        <div class="card">
+                            <div class="card-header">
+                                <h6>Daftar Transaksi</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-hover">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Tanggal</th>
+                                                <th>Jenis</th>
+                                                <th>Jumlah</th>
+                                                <th>Deskripsi</th>
+                                                <th>MTI</th>
+                                                <th>STAN</th>
+                                                <th>Resp. Code</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var tx in transactions)
+                                            {
+                                                var amountClass = tx.TransactionType.Contains("Masuk") || tx.TransactionType == "Setor" || tx.TransactionType == "Pembukaan Akun" ? "text-success" : "text-danger";
+                                                var amountPrefix = tx.TransactionType.Contains("Masuk") || tx.TransactionType == "Setor" || tx.TransactionType == "Pembukaan Akun" ? "+" : "-";
+                                                var responseClass = tx.ResponseCode == "00" ? "text-success" : "text-danger";
+                                                <tr>
+                                                    <td>@tx.TransactionDate.ToString("dd/MM/yyyy HH:mm")</td>
+                                                    <td>@tx.TransactionType</td>
+                                                    <td class="@amountClass fw-bold">@amountPrefix Rp @tx.Amount.ToString("N2")</td>
+                                                    <td>@tx.Description</td>
+                                                    <td>@tx.MTI</td>
+                                                    <td>@tx.Stan</td>
+                                                    <td class="@responseClass fw-bold">@tx.ResponseCode</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning">Belum ada transaksi.</div>
+                    }
+
+                    <div class="d-grid gap-2 d-md-flex mt-3">
+                        <a asp-action="TransactionHistory" asp-route-id="@Model.Id" class="btn btn-dark">Refresh</a>
+                        <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-secondary">Detail Rekening</a>
+                        <a asp-action="Index" class="btn btn-secondary">Daftar Rekening</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

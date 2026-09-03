@@ -313,6 +313,220 @@ namespace AplikasiBanking8583.Controllers.ISO8583
                 return BadRequest(new { error = "Failed to parse ISO 8583 message", details = ex.Message });
             }
         }
+
+        [HttpPost("simulate-balance-inquiry")]
+        [ProducesResponseType(typeof(object), 200)]
+        [ProducesResponseType(typeof(object), 400)]
+        [ProducesResponseType(typeof(object), 404)]
+        public async Task<IActionResult> SimulateBalanceInquiry([FromBody] SimulateBalanceInquiryRequest request)
+        {
+            var account = await _context.Accounts.FirstOrDefaultAsync(a => a.AccountNumber == request.AccountNumber);
+            if (account == null)
+            {
+                return NotFound(new { error = "Rekening tidak ditemukan" });
+            }
+
+            var stan = Iso8583TransactionBuilder.GenerateSTAN();
+            var isoRequest = Iso8583TransactionBuilder.BuildBalanceInquiryMessage(account, stan, TerminalId);
+            var isoResponse = Iso8583ResponseBuilder.BuildBalanceInquiryResponse(isoRequest, true, "00", account.AccountNumber, account.Balance);
+
+            var transaction = new Transaction
+            {
+                AccountId = account.Id,
+                TransactionType = "Cek Saldo",
+                Amount = 0,
+                Description = "Inquiry saldo via API",
+                TransactionDate = DateTime.Now,
+                Stan = stan,
+                Rrn = isoResponse.GetString(37),
+                ResponseCode = "00",
+                MTI = "0100/0110",
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "INQUIRY",
+                OperationType = "BALANCE_INQUIRY",
+                ResponseMessage = $"Saldo: Rp {account.Balance:N2}"
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Balance inquiry successful",
+                accountNumber = account.AccountNumber,
+                accountHolder = account.AccountHolderName,
+                balance = account.Balance,
+                currency = "IDR",
+                iso8583Request = isoRequest.ToIso8583String(),
+                iso8583Response = isoResponse.ToIso8583String(),
+                stan = stan,
+                rrn = isoResponse.GetString(37),
+                responseCode = "00",
+                timestamp = DateTime.Now
+            });
+        }
+
+        [HttpPost("simulate-account-opening")]
+        [ProducesResponseType(typeof(object), 200)]
+        [ProducesResponseType(typeof(object), 400)]
+        public async Task<IActionResult> SimulateAccountOpening([FromBody] SimulateAccountOpeningRequest request)
+        {
+            if (string.IsNullOrEmpty(request.AccountNumber) || string.IsNullOrEmpty(request.AccountHolderName))
+            {
+                return BadRequest(new { error = "AccountNumber dan AccountHolderName harus diisi" });
+            }
+
+            var exists = await _context.Accounts.AnyAsync(a => a.AccountNumber == request.AccountNumber);
+            if (exists)
+            {
+                return BadRequest(new { error = "Nomor rekening sudah ada" });
+            }
+
+            var account = new Account
+            {
+                AccountNumber = request.AccountNumber,
+                AccountHolderName = request.AccountHolderName,
+                AccountType = request.AccountType ?? "Tabungan",
+                Balance = 0,
+                CreatedAt = DateTime.Now
+            };
+
+            _context.Accounts.Add(account);
+            await _context.SaveChangesAsync();
+
+            var stan = Iso8583TransactionBuilder.GenerateSTAN();
+            var isoRequest = Iso8583TransactionBuilder.BuildAccountOpeningMessage(account, stan, TerminalId);
+            var isoResponse = Iso8583ResponseBuilder.BuildAccountOpeningResponse(isoRequest, true, "00", account.AccountNumber, account.Id);
+
+            var transaction = new Transaction
+            {
+                AccountId = account.Id,
+                TransactionType = "Pembukaan Akun",
+                Amount = 0,
+                Description = $"Pembukaan akun {account.AccountType} via API",
+                TransactionDate = DateTime.Now,
+                Stan = stan,
+                Rrn = isoResponse.GetString(37),
+                ResponseCode = "00",
+                MTI = "0100/0110",
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "ACCOUNT_OPENING",
+                OperationType = "ACCOUNT_OPENING",
+                ResponseMessage = "Akun berhasil dibuka"
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Account opening successful",
+                accountNumber = account.AccountNumber,
+                accountHolder = account.AccountHolderName,
+                accountType = account.AccountType,
+                accountId = account.Id,
+                iso8583Request = isoRequest.ToIso8583String(),
+                iso8583Response = isoResponse.ToIso8583String(),
+                stan = stan,
+                rrn = isoResponse.GetString(37),
+                responseCode = "00",
+                timestamp = DateTime.Now
+            });
+        }
+
+        [HttpPost("simulate-transaction-history")]
+        [ProducesResponseType(typeof(object), 200)]
+        [ProducesResponseType(typeof(object), 400)]
+        [ProducesResponseType(typeof(object), 404)]
+        public async Task<IActionResult> SimulateTransactionHistory([FromBody] SimulateTransactionHistoryRequest request)
+        {
+            var account = await _context.Accounts.FirstOrDefaultAsync(a => a.AccountNumber == request.AccountNumber);
+            if (account == null)
+            {
+                return NotFound(new { error = "Rekening tidak ditemukan" });
+            }
+
+            var transactions = await _context.Transactions
+                .Where(t => t.AccountId == account.Id)
+                .OrderByDescending(t => t.TransactionDate)
+                .Take(request.PageSize)
+                .ToListAsync();
+
+            var fromDate = request.FromDate ?? DateTime.Today.AddDays(-30);
+            var toDate = request.ToDate ?? DateTime.Now;
+
+            var stan = Iso8583TransactionBuilder.GenerateSTAN();
+            var isoRequest = Iso8583TransactionBuilder.BuildTransactionHistoryMessage(account, fromDate, toDate, stan, TerminalId);
+            var isoResponse = Iso8583ResponseBuilder.BuildTransactionHistoryResponse(isoRequest, true, "00", account.AccountNumber, transactions.Count);
+
+            var transaction = new Transaction
+            {
+                AccountId = account.Id,
+                TransactionType = "Riwayat Transaksi",
+                Amount = 0,
+                Description = $"Inquiry riwayat transaksi via API - {transactions.Count} records",
+                TransactionDate = DateTime.Now,
+                Stan = stan,
+                Rrn = isoResponse.GetString(37),
+                ResponseCode = "00",
+                MTI = "0100/0110",
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "INQUIRY",
+                OperationType = "HISTORY_INQUIRY",
+                ResponseMessage = $"{transactions.Count} transaksi ditemukan"
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Transaction history inquiry successful",
+                accountNumber = account.AccountNumber,
+                accountHolder = account.AccountHolderName,
+                fromDate = fromDate,
+                toDate = toDate,
+                totalTransactions = transactions.Count,
+                transactions = transactions.Select(t => new
+                {
+                    id = t.Id,
+                    type = t.TransactionType,
+                    amount = t.Amount,
+                    description = t.Description,
+                    date = t.TransactionDate,
+                    stan = t.Stan,
+                    rrn = t.Rrn,
+                    responseCode = t.ResponseCode,
+                    mti = t.MTI
+                }).ToList(),
+                iso8583Request = isoRequest.ToIso8583String(),
+                iso8583Response = isoResponse.ToIso8583String(),
+                stan = stan,
+                rrn = isoResponse.GetString(37),
+                responseCode = "00",
+                timestamp = DateTime.Now
+            });
+        }
+    }
+
+    public class SimulateBalanceInquiryRequest
+    {
+        public string AccountNumber { get; set; } = string.Empty;
+    }
+
+    public class SimulateAccountOpeningRequest
+    {
+        public string AccountNumber { get; set; } = string.Empty;
+        public string AccountHolderName { get; set; } = string.Empty;
+        public string? AccountType { get; set; }
+    }
+
+    public class SimulateTransactionHistoryRequest
+    {
+        public string AccountNumber { get; set; } = string.Empty;
+        public DateTime? FromDate { get; set; }
+        public DateTime? ToDate { get; set; }
+        public int PageSize { get; set; } = 50;
     }
 
     public class SimulateSetorRequest

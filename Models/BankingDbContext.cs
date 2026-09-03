@@ -39,8 +39,11 @@ namespace AplikasiBanking8583.Models
                 entity.Property(t => t.Stan).HasMaxLength(6);
                 entity.Property(t => t.Rrn).HasMaxLength(12);
                 entity.Property(t => t.ResponseCode).HasMaxLength(4).HasDefaultValue("00");
-                entity.Property(t => t.MTI).HasMaxLength(6);
+                entity.Property(t => t.MTI).HasMaxLength(20);
                 entity.Property(t => t.Iso8583MessageRaw).HasMaxLength(2000);
+                entity.Property(t => t.TransactionCategory).HasMaxLength(20).HasDefaultValue("FINANCIAL");
+                entity.Property(t => t.OperationType).HasMaxLength(50);
+                entity.Property(t => t.ResponseMessage).HasMaxLength(200);
                 entity.HasOne(t => t.Account)
                       .WithMany(a => a.Transactions)
                       .HasForeignKey(t => t.AccountId)

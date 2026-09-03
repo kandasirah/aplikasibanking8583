@@ -1,0 +1,31 @@
+@model AplikasiBanking8583.Models.Account
+
+@{
+    ViewData["Title"] = "Cek Saldo";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h4>Cek Saldo - @Model.AccountNumber</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>Nama Pemilik:</strong> @Model.AccountHolderName<br />
+                        <strong>Saldo Saat Ini:</strong> Rp @Model.Balance.ToString("N2")
+                    </div>
+
+                    <form asp-action="BalanceInquiry" method="post">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-info">Cek Saldo via ISO 8583</button>
+                            <a asp-action="Index" class="btn btn-secondary">Kembali</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

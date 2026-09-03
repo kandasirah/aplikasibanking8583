@@ -50,6 +50,18 @@ namespace AplikasiBanking8583.Models
         [Display(Name = "ISO8583 Message")]
         public string Iso8583MessageRaw { get; set; } = string.Empty;
 
+        [StringLength(20)]
+        [Display(Name = "Kategori Transaksi")]
+        public string TransactionCategory { get; set; } = "FINANCIAL";
+
+        [StringLength(50)]
+        [Display(Name = "Jenis Operasi")]
+        public string OperationType { get; set; } = string.Empty;
+
+        [StringLength(200)]
+        [Display(Name = "Pesan Response")]
+        public string? ResponseMessage { get; set; }
+
         [Display(Name = "Tanggal")]
         public DateTime TransactionDate { get; set; } = DateTime.Now;
 

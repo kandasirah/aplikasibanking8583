@@ -28,17 +28,21 @@ Aplikasi banking modern yang dibangun menggunakan ASP.NET Core MVC dengan integr
 - **Setor Tunai** — Menambah saldo rekening
 - **Tarik Tunai** — Mengurangi saldo dengan validasi saldo cukup
 - **Transfer** — Transfer antar rekening dengan referensi unik
+- **Cek Saldo** — Inquiry saldo via ISO 8583 tanpa perubahan saldo
 - **Riwayat Transaksi** — Melihat semua transaksi dengan detail ISO 8583
 
 ### 3. ISO 8583 Financial Transaction Layer
-- Setiap transaksi menghasilkan pesan ISO 8583 lengkap (MTI + Bitmap + Data Elements)
+- Setiap operasi perbankan menghasilkan pesan ISO 8583 lengkap (MTI + Bitmap + Data Elements)
+- Financial transactions: MTI 0200/0210 (Setor, Tarik, Transfer)
+- Non-financial transactions: MTI 0100/0110 (Balance Inquiry, Account Opening, Transaction History)
 - Penyimpanan data ISO 8583 di database untuk audit dan compliance
 - STAN (System Trace Audit Number) unik untuk setiap transaksi
 - RRN (Retrieval Reference Number) untuk tracking
 - Response Code sesuai standar ISO 8583
+- Kategori transaksi: FINANCIAL, INQUIRY, ACCOUNT_OPENING
 
 ### 4. API Simulator
-- REST API untuk simulasi transaksi ISO 8583
+- REST API untuk simulasi semua transaksi ISO 8583
 - Swagger UI untuk dokumentasi dan testing API
 - Endpoint untuk parsing pesan ISO 8583
 
@@ -82,9 +86,12 @@ Aplikasi banking modern yang dibangun menggunakan ASP.NET Core MVC dengan integr
 │  │  │ - Index         │    │ - SimulateSetor          │   │   │
 │  │  │ - Create        │    │ - SimulateTarik          │   │   │
 │  │  │ - Deposit       │    │ - SimulateTransfer       │   │   │
-│  │  │ - Withdraw      │    │ - GetTransactions        │   │   │
-│  │  │ - Transfer      │    │ - ParseMessage           │   │   │
-│  │  │ - History       │    └─────────────────────────┘   │   │
+│  │  │ - Withdraw      │    │ - SimulateBalanceInquiry │   │   │
+│  │  │ - Transfer      │    │ - SimulateAccountOpening │   │   │
+│  │  │ - BalanceInquiry│    │ - SimulateTransactionHistory│   │   │
+│  │  │ - TransactionHistory│ │ - GetTransactions        │   │   │
+│  │  │ - History       │    │ - ParseMessage           │   │   │
+│  │  │ - Details       │    └─────────────────────────┘   │   │
 │  │  └────────────────┘                                    │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
@@ -99,13 +106,19 @@ Aplikasi banking modern yang dibangun menggunakan ASP.NET Core MVC dengan integr
 │  │  │ - MTI          │  │ - BuildSetorMessage      │   │   │
 │  │  │ - DataElements │  │ - BuildTarikMessage      │   │   │
 │  │  │ - Parse()      │  │ - BuildTransferMessage   │   │   │
-│  │  │ - ToString()   │  │ - GenerateSTAN           │   │   │
+│  │  │ - ToString()   │  │ - BuildBalanceInquiryMessage│   │   │
+│  │  │ Iso8583Message │  │ - BuildAccountOpeningMessage│   │   │
+│  │  │                 │  │ - BuildTransactionHistoryMessage│   │
+│  │  │                 │  │ - GenerateSTAN           │   │   │
 │  │  └────────────────┘  └──────────────────────────┘   │   │
 │  │  ┌──────────────────────────────────────────────┐   │   │
 │  │  │      Iso8583ResponseBuilder                   │   │   │
 │  │  │ - BuildSetorResponse                          │   │   │
 │  │  │ - BuildTarikResponse                          │   │   │
 │  │  │ - BuildTransferResponse                       │   │   │
+│  │  │ - BuildBalanceInquiryResponse                 │   │   │
+│  │  │ - BuildAccountOpeningResponse                 │   │   │
+│  │  │ - BuildTransactionHistoryResponse             │   │   │
 │  │  └──────────────────────────────────────────────┘   │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
@@ -168,6 +181,9 @@ Aplikasi banking modern yang dibangun menggunakan ASP.NET Core MVC dengan integr
 | ResponseCode | varchar(4) | NO | - | 00 | Response code ISO 8583 |
 | MTI | varchar(20) | NO | - | - | Message Type Indicator |
 | Iso8583MessageRaw | varchar(2000) | NO | - | - | Raw ISO 8583 message |
+| TransactionCategory | varchar(20) | NO | - | FINANCIAL | Kategori transaksi (FINANCIAL, INQUIRY, ACCOUNT_OPENING) |
+| OperationType | varchar(50) | NO | - | - | Jenis operasi (SETOR, TARIK, TRANSFER, BALANCE_INQUIRY, HISTORY_INQUIRY, ACCOUNT_OPENING) |
+| ResponseMessage | varchar(200) | YES | - | NULL | Pesan response human-readable |
 | TransactionDate | datetime | NO | - | CURRENT_TIMESTAMP | Waktu transaksi |
 
 ### Entity Relationship Diagram
@@ -186,6 +202,9 @@ Aplikasi banking modern yang dibangun menggunakan ASP.NET Core MVC dengan integr
                             │ ResponseCode    │
                             │ MTI             │
                             │ Iso8583MessageRaw│
+                            │ TransactionCategory│
+                            │ OperationType   │
+                            │ ResponseMessage │
                             │ TransactionDate │
                             └─────────────────┘
 ```
@@ -315,6 +334,110 @@ Digunakan untuk membatalkan transaksi sebelumnya.
 | 41 | Card Acceptor Terminal ID | TerminalId | ID terminal |
 | 42 | Card Acceptor Identification Code | `BANKINGAPPSYS` | Kode sistem |
 | 90 | Original Data Elements | Original RRN | RRN transaksi asli |
+
+### 5. Balance Inquiry (Non-Financial Transaction)
+
+**MTI:** `0100` (Request) → `0110` (Response)
+
+**Kategori:** Non-Financial / INQUIRY  
+**OperationType:** BALANCE_INQUIRY  
+**Balance Impact:** None (hanya inquiry)
+
+| Element | Name | Request | Response |
+|---------|------|---------|----------|
+| 2 | Primary Account Number | AccountNumber | AccountNumber |
+| 3 | Processing Code | `310000` | `310000` |
+| 7 | Transmission Date & Time | MMDDhhmmss | MMDDhhmmss |
+| 11 | System Trace Audit Number | STAN | STAN |
+| 12 | Time, Local Transaction | hhmmss | hhmmss |
+| 13 | Date, Local Transaction | MMDD | MMDD |
+| 17 | Date, Capture | MMDD | MMDD |
+| 22 | Point of Service Entry Mode | `012` | `012` |
+| 32 | Acquiring Institution ID | `1234567890` | `1234567890` |
+| 35 | Track 2 Data | AccountNumber | AccountNumber |
+| 37 | Retrieval Reference Number | RRN | RRN |
+| 41 | Card Acceptor Terminal ID | TerminalId | TerminalId |
+| 42 | Card Acceptor Identification Code | `BANKINGAPPSYS` | `BANKINGAPPSYS` |
+| 43 | Card Acceptor Name/Location | `BANKING APPLICATION TERMINAL` | `BANKING APPLICATION TERMINAL` |
+| 49 | Currency Code, Transaction | `360` | `360` |
+| 54 | Additional Amounts | - | `BAL:{balance}` |
+| 60 | Transaction Type | `INQUIRY` | `INQUIRY` |
+| 61 | Account Reference | AccountId | AccountId |
+| 63 | Transaction Status | - | `SUCCESS` / `ERROR` |
+
+**Response Code:**
+- `00` — Approved/Found
+- `40` — Request in progress
+- `51` — Account not found
+
+### 6. Account Opening (Non-Financial Transaction)
+
+**MTI:** `0100` (Request) → `0110` (Response)
+
+**Kategori:** ACCOUNT_OPENING  
+**OperationType:** ACCOUNT_OPENING  
+**Balance Impact:** 0 (initial balance)
+
+| Element | Name | Request | Response |
+|---------|------|---------|----------|
+| 2 | Primary Account Number | AccountNumber | AccountNumber |
+| 3 | Processing Code | `000000` | `000000` |
+| 7 | Transmission Date & Time | MMDDhhmmss | MMDDhhmmss |
+| 11 | System Trace Audit Number | STAN | STAN |
+| 12 | Time, Local Transaction | hhmmss | hhmmss |
+| 13 | Date, Local Transaction | MMDD | MMDD |
+| 17 | Date, Capture | MMDD | MMDD |
+| 22 | Point of Service Entry Mode | `012` | `012` |
+| 32 | Acquiring Institution ID | `1234567890` | `1234567890` |
+| 35 | Track 2 Data | AccountNumber | AccountNumber |
+| 37 | Retrieval Reference Number | RRN | RRN |
+| 41 | Card Acceptor Terminal ID | TerminalId | TerminalId |
+| 42 | Card Acceptor Identification Code | `BANKINGAPPSYS` | `BANKINGAPPSYS` |
+| 43 | Card Acceptor Name/Location | `BANKING APPLICATION TERMINAL` | `BANKING APPLICATION TERMINAL` |
+| 49 | Currency Code, Transaction | `360` | `360` |
+| 60 | Transaction Type | `ACCOUNT_OPENING` | `ACCOUNT_OPENING` |
+| 61 | Account Reference | AccountId | AccountId |
+| 63 | Transaction Status | `NAME:{name}|TYPE:{type}` | `SUCCESS` / `ERROR` |
+
+**Response Code:**
+- `00` — Approved/Success
+- `05` — Do not honor
+- `12` — Invalid transaction
+
+### 7. Transaction History Inquiry (Non-Financial Transaction)
+
+**MTI:** `0100` (Request) → `0110` (Response)
+
+**Kategori:** INQUIRY  
+**OperationType:** HISTORY_INQUIRY  
+**Balance Impact:** None
+
+| Element | Name | Request | Response |
+|---------|------|---------|----------|
+| 2 | Primary Account Number | AccountNumber | AccountNumber |
+| 3 | Processing Code | `000000` | `000000` |
+| 7 | Transmission Date & Time | MMDDhhmmss | MMDDhhmmss |
+| 11 | System Trace Audit Number | STAN | STAN |
+| 12 | Time, Local Transaction | hhmmss | hhmmss |
+| 13 | Date, Local Transaction | MMDD | MMDD |
+| 17 | Date, Capture | MMDD | MMDD |
+| 22 | Point of Service Entry Mode | `012` | `012` |
+| 32 | Acquiring Institution ID | `1234567890` | `1234567890` |
+| 35 | Track 2 Data | AccountNumber | AccountNumber |
+| 37 | Retrieval Reference Number | RRN | RRN |
+| 41 | Card Acceptor Terminal ID | TerminalId | TerminalId |
+| 42 | Card Acceptor Identification Code | `BANKINGAPPSYS` | `BANKINGAPPSYS` |
+| 43 | Card Acceptor Name/Location | `BANKING APPLICATION TERMINAL` | `BANKING APPLICATION TERMINAL` |
+| 49 | Currency Code, Transaction | `360` | `360` |
+| 60 | Transaction Type | `HISTORY_INQUIRY` | `HISTORY_INQUIRY` |
+| 61 | Account Reference | AccountId | AccountId |
+| 62 | Additional Data | `FROM:{fromDate}|TO:{toDate}` | Transaction count |
+| 63 | Transaction Status | - | `SUCCESS` / `ERROR` |
+
+**Response Code:**
+- `00` — Approved/Found
+- `40` — Request in progress
+- `51` — Account not found
 
 ---
 
@@ -501,20 +624,133 @@ GET /api/iso8583/parse-message?message=0200...
 }
 ```
 
+### 7. Simulate Balance Inquiry
+
+```
+POST /api/iso8583/simulate-balance-inquiry
+```
+
+**Request Body:**
+```json
+{
+  "accountNumber": "1234567890"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Balance inquiry successful",
+  "accountNumber": "1234567890",
+  "accountHolder": "John Doe",
+  "balance": 150000,
+  "currency": "IDR",
+  "iso8583Request": "0100...",
+  "iso8583Response": "0110...",
+  "stan": "D7B1C8",
+  "rrn": "106309E36809",
+  "responseCode": "00",
+  "timestamp": "2026-09-03T11:27:22.2289517+09:00"
+}
+```
+
+### 8. Simulate Account Opening
+
+```
+POST /api/iso8583/simulate-account-opening
+```
+
+**Request Body:**
+```json
+{
+  "accountNumber": "1122334455",
+  "accountHolderName": "Alice Johnson",
+  "accountType": "Giro"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Account opening successful",
+  "accountNumber": "1122334455",
+  "accountHolder": "Alice Johnson",
+  "accountType": "Giro",
+  "accountId": 2,
+  "iso8583Request": "0100...",
+  "iso8583Response": "0110...",
+  "stan": "82FF3A",
+  "rrn": "D0A048F7DD64",
+  "responseCode": "00",
+  "timestamp": "2026-09-03T11:27:51.7903868+09:00"
+}
+```
+
+### 9. Simulate Transaction History
+
+```
+POST /api/iso8583/simulate-transaction-history
+```
+
+**Request Body:**
+```json
+{
+  "accountNumber": "1234567890",
+  "fromDate": "2026-08-01",
+  "toDate": "2026-09-03",
+  "pageSize": 50
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Transaction history inquiry successful",
+  "accountNumber": "1234567890",
+  "accountHolder": "John Doe",
+  "fromDate": "2026-08-04T00:00:00Z",
+  "toDate": "2026-09-03T11:28:21Z",
+  "totalTransactions": 1,
+  "transactions": [
+    {
+      "id": 1,
+      "type": "Cek Saldo",
+      "amount": 0,
+      "description": "Inquiry saldo via API",
+      "date": "2026-09-03T11:27:22",
+      "stan": "D7B1C8",
+      "rrn": "106309E36809",
+      "responseCode": "00",
+      "mti": "0100/0110"
+    }
+  ],
+  "iso8583Request": "0100...",
+  "iso8583Response": "0110...",
+  "stan": "960443",
+  "rrn": "0D91E9754F13",
+  "responseCode": "00",
+  "timestamp": "2026-09-03T11:28:21.5097093+09:00"
+}
+```
+
 ### MVC Endpoints
 
 | URL | Method | Deskripsi |
 |-----|--------|-----------|
 | `/` | GET | Daftar semua rekening |
 | `/Account/Create` | GET | Form buka rekening |
-| `/Account/Create` | POST | Proses buka rekening |
+| `/Account/Create` | POST | Proses buka rekening (ISO 8583 0100/0110) |
 | `/Account/Deposit/{id}` | GET | Form setor tunai |
-| `/Account/Deposit/{id}` | POST | Proses setor tunai |
+| `/Account/Deposit/{id}` | POST | Proses setor tunai (ISO 8583 0200/0210) |
 | `/Account/Withdraw/{id}` | GET | Form tarik tunai |
-| `/Account/Withdraw/{id}` | POST | Proses tarik tunai |
+| `/Account/Withdraw/{id}` | POST | Proses tarik tunai (ISO 8583 0200/0210) |
 | `/Account/Transfer/{id}` | GET | Form transfer |
-| `/Account/Transfer/{id}` | POST | Proses transfer |
-| `/Account/History/{id}` | GET | Riwayat transaksi |
+| `/Account/Transfer/{id}` | POST | Proses transfer (ISO 8583 0200/0210) |
+| `/Account/BalanceInquiry/{id}` | GET | Form cek saldo |
+| `/Account/BalanceInquiry/{id}` | POST | Proses cek saldo (ISO 8583 0100/0110) |
+| `/Account/TransactionHistory/{id}` | GET | Form riwayat transaksi |
+| `/Account/TransactionHistory/{id}` | POST | Proses riwayat transaksi (ISO 8583 0100/0110) |
+| `/Account/History/{id}` | GET | Riwayat transaksi (legacy) |
 | `/Account/Details/{id}` | GET | Detail rekening |
 
 ---
@@ -634,6 +870,24 @@ curl http://localhost:5015/Account/History/1
 curl "http://localhost:5015/api/iso8583/transactions?accountNumber=1234567890"
 ```
 
+#### 7. Cek Saldo via API (ISO 8583 0100/0110)
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d "{\"accountNumber\":\"1234567890\"}" http://localhost:5015/api/iso8583/simulate-balance-inquiry
+```
+
+#### 8. Buka Rekening via API (ISO 8583 0100/0110)
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d "{\"accountNumber\":\"1122334455\",\"accountHolderName\":\"Alice Johnson\",\"accountType\":\"Giro\"}" http://localhost:5015/api/iso8583/simulate-account-opening
+```
+
+#### 9. Riwayat Transaksi via API (ISO 8583 0100/0110)
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d "{\"accountNumber\":\"1234567890\"}" http://localhost:5015/api/iso8583/simulate-transaction-history
+```
+
 ### Testing via Swagger UI
 
 1. Buka http://localhost:5015/swagger
@@ -669,6 +923,8 @@ curl "http://localhost:5015/api/iso8583/transactions?accountNumber=1234567890"
    - Identifikasi tipe pesan ISO 8583
    - `0200` — Financial transaction request
    - `0210` — Financial transaction response
+   - `0100` — Non-financial transaction request (Balance Inquiry, Account Opening, Transaction History)
+   - `0110` — Non-financial transaction response
    - `0420` — Reversal request
    - `0430` — Reversal response
 
@@ -725,9 +981,48 @@ mysql -u root -e "ALTER TABLE banking_db.transactions MODIFY COLUMN MTI varchar(
 
 ---
 
+## Kategori dan Jenis Operasi Transaksi
+
+### TransactionCategory
+
+| Kategori | Deskripsi | Contoh |
+|----------|-----------|--------|
+| `FINANCIAL` | Transaksi finansial yang mengubah saldo | Setor, Tarik, Transfer |
+| `INQUIRY` | Operasi inquiry tanpa perubahan saldo | Cek Saldo, Riwayat Transaksi |
+| `ACCOUNT_OPENING` | Pembukaan akun baru | Buka Rekening |
+
+### OperationType
+
+| OperationType | TransactionType | MTI | Kategori |
+|---------------|-----------------|-----|----------|
+| `SETOR` | Setor | 0200/0210 | FINANCIAL |
+| `TARIK` | Tarik | 0200/0210 | FINANCIAL |
+| `TRANSFER` | Transfer Keluar/Masuk | 0200/0210 | FINANCIAL |
+| `BALANCE_INQUIRY` | Cek Saldo | 0100/0110 | INQUIRY |
+| `HISTORY_INQUIRY` | Riwayat Transaksi | 0100/0110 | INQUIRY |
+| `ACCOUNT_OPENING` | Pembukaan Akun | 0100/0110 | ACCOUNT_OPENING |
+
+---
+
 ## Developer
 
 Dikembangkan menggunakan ASP.NET Core 8.0 dengan arsitektur MVC dan integrasi ISO 8583 financial transaction messaging standard.
+
+---
+
+## Changelog
+
+### Version 2.0 (2026-09-03)
+- Menambahkan ISO 8583 untuk semua operasi perbankan
+- Operasi non-financial sekarang menggunakan MTI 0100/0110
+- Field database baru: TransactionCategory, OperationType, ResponseMessage
+- API simulator baru: simulate-balance-inquiry, simulate-account-opening, simulate-transaction-history
+- MVC views baru: BalanceInquiry, TransactionHistory
+
+### Version 1.0 (2026-09-02)
+- Aplikasi banking dasar dengan ISO 8583 untuk transaksi finansial
+- Fitur: Setor, Tarik, Transfer, Buka Rekening
+- MTI: 0200/0210 untuk financial transactions
 
 ---
 

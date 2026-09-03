@@ -43,6 +43,32 @@ namespace AplikasiBanking8583.Controllers
                 account.CreatedAt = DateTime.Now;
                 _context.Accounts.Add(account);
                 await _context.SaveChangesAsync();
+
+                var stan = Iso8583TransactionBuilder.GenerateSTAN();
+                var isoRequest = Iso8583TransactionBuilder.BuildAccountOpeningMessage(account, stan, TerminalId);
+                var isoResponse = Iso8583ResponseBuilder.BuildAccountOpeningResponse(isoRequest, true, "00", account.AccountNumber, account.Id);
+
+                var transaction = new Transaction
+                {
+                    AccountId = account.Id,
+                    TransactionType = "Pembukaan Akun",
+                    Amount = 0,
+                    Description = $"Pembukaan akun {account.AccountType}",
+                    TransactionDate = DateTime.Now,
+                    Stan = stan,
+                    Rrn = isoResponse.GetString(37),
+                    ResponseCode = "00",
+                    MTI = "0100/0110",
+                    Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                    TransactionCategory = "ACCOUNT_OPENING",
+                    OperationType = "ACCOUNT_OPENING",
+                    ResponseMessage = "Akun berhasil dibuka"
+                };
+
+                _context.Transactions.Add(transaction);
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = $"Rekening {account.AccountNumber} berhasil dibuka";
                 return RedirectToAction(nameof(Index));
             }
             return View(account);
@@ -86,7 +112,10 @@ namespace AplikasiBanking8583.Controllers
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "SETOR",
+                ResponseMessage = $"Setor tunai berhasil. Saldo baru: Rp {account.Balance:N2}"
             };
 
             _context.Transactions.Add(transaction);
@@ -141,7 +170,10 @@ namespace AplikasiBanking8583.Controllers
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "TARIK",
+                ResponseMessage = $"Tarik tunai berhasil. Saldo baru: Rp {account.Balance:N2}"
             };
 
             _context.Transactions.Add(transaction);
@@ -211,7 +243,10 @@ namespace AplikasiBanking8583.Controllers
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "TRANSFER",
+                ResponseMessage = $"Transfer berhasil ke {toAccount.AccountNumber}. Saldo baru: Rp {fromAccount.Balance:N2}"
             };
 
             var inTransaction = new Transaction
@@ -226,7 +261,10 @@ namespace AplikasiBanking8583.Controllers
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "TRANSFER",
+                ResponseMessage = $"Transfer diterima dari {fromAccount.AccountNumber}. Saldo baru: Rp {toAccount.Balance:N2}"
             };
 
             _context.Transactions.Add(outTransaction);
@@ -235,6 +273,109 @@ namespace AplikasiBanking8583.Controllers
 
             TempData["Success"] = $"Transfer berhasil ke {toAccount.AccountNumber}. Saldo baru: Rp {fromAccount.Balance:N2}";
             return RedirectToAction(nameof(Index));
+        }
+
+        public async Task<IActionResult> BalanceInquiry(int? id)
+        {
+            if (id == null) return NotFound();
+            var account = await _context.Accounts.FindAsync(id);
+            if (account == null) return NotFound();
+            return View(account);
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> BalanceInquiry(int id)
+        {
+            var account = await _context.Accounts.FindAsync(id);
+            if (account == null) return NotFound();
+
+            var stan = Iso8583TransactionBuilder.GenerateSTAN();
+            var isoRequest = Iso8583TransactionBuilder.BuildBalanceInquiryMessage(account, stan, TerminalId);
+            var isoResponse = Iso8583ResponseBuilder.BuildBalanceInquiryResponse(isoRequest, true, "00", account.AccountNumber, account.Balance);
+
+            var transaction = new Transaction
+            {
+                AccountId = account.Id,
+                TransactionType = "Cek Saldo",
+                Amount = 0,
+                Description = "Inquiry saldo",
+                TransactionDate = DateTime.Now,
+                Stan = stan,
+                Rrn = isoResponse.GetString(37),
+                ResponseCode = "00",
+                MTI = "0100/0110",
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "INQUIRY",
+                OperationType = "BALANCE_INQUIRY",
+                ResponseMessage = $"Saldo: Rp {account.Balance:N2}"
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            ViewBag.Iso8583Request = isoRequest.ToIso8583String();
+            ViewBag.Iso8583Response = isoResponse.ToIso8583String();
+            ViewBag.Stan = stan;
+            ViewBag.Rrn = isoResponse.GetString(37);
+            ViewBag.ResponseCode = "00";
+
+            return View("BalanceInquiryResult", account);
+        }
+
+        public async Task<IActionResult> TransactionHistory(int? id)
+        {
+            if (id == null) return NotFound();
+            var account = await _context.Accounts.FindAsync(id);
+            if (account == null) return NotFound();
+            return View(account);
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> TransactionHistory(int id)
+        {
+            var account = await _context.Accounts.FindAsync(id);
+            if (account == null) return NotFound();
+
+            var stan = Iso8583TransactionBuilder.GenerateSTAN();
+            var isoRequest = Iso8583TransactionBuilder.BuildTransactionHistoryMessage(account, DateTime.Today.AddDays(-30), DateTime.Now, stan, TerminalId);
+
+            var transactions = await _context.Transactions
+                .Where(t => t.AccountId == id)
+                .OrderByDescending(t => t.TransactionDate)
+                .ToListAsync();
+
+            var isoResponse = Iso8583ResponseBuilder.BuildTransactionHistoryResponse(isoRequest, true, "00", account.AccountNumber, transactions.Count);
+
+            var transaction = new Transaction
+            {
+                AccountId = account.Id,
+                TransactionType = "Riwayat Transaksi",
+                Amount = 0,
+                Description = $"Inquiry riwayat transaksi - {transactions.Count} records",
+                TransactionDate = DateTime.Now,
+                Stan = stan,
+                Rrn = isoResponse.GetString(37),
+                ResponseCode = "00",
+                MTI = "0100/0110",
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "INQUIRY",
+                OperationType = "HISTORY_INQUIRY",
+                ResponseMessage = $"{transactions.Count} transaksi ditemukan"
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            ViewBag.Iso8583Request = isoRequest.ToIso8583String();
+            ViewBag.Iso8583Response = isoResponse.ToIso8583String();
+            ViewBag.Stan = stan;
+            ViewBag.Rrn = isoResponse.GetString(37);
+            ViewBag.ResponseCode = "00";
+            ViewBag.Transactions = transactions;
+
+            return View("TransactionHistoryResult", account);
         }
 
         public async Task<IActionResult> History(int? id)
