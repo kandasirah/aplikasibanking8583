@@ -1,0 +1,30 @@
+# Build results
+bin/
+obj/
+
+# Temporary files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+*.vscode/
+
+# Database
+*.mdf
+*.ldf
+*.mdf
+*.ldf.bak
+
+# Logs
+*.log
+
+# IDEs
+.idea/
+.vs/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store

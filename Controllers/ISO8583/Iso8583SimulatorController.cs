@@ -224,13 +224,28 @@ namespace AplikasiBanking8583.Controllers.ISO8583
 
         [HttpGet("transactions")]
         [ProducesResponseType(typeof(List<object>), 200)]
-        public async Task<IActionResult> GetTransactions([FromQuery] string? accountNumber, [FromQuery] int? page = 1, [FromQuery] int? pageSize = 50)
+        public async Task<IActionResult> GetTransactions(
+            [FromQuery] string? accountNumber,
+            [FromQuery] string? transactionCategory,
+            [FromQuery] string? operationType,
+            [FromQuery] int? page = 1,
+            [FromQuery] int? pageSize = 50)
         {
             var query = _context.Transactions.Include(t => t.Account).AsQueryable();
 
             if (!string.IsNullOrEmpty(accountNumber))
             {
                 query = query.Where(t => t.Account!.AccountNumber == accountNumber);
+            }
+
+            if (!string.IsNullOrEmpty(transactionCategory))
+            {
+                query = query.Where(t => t.TransactionCategory == transactionCategory);
+            }
+
+            if (!string.IsNullOrEmpty(operationType))
+            {
+                query = query.Where(t => t.OperationType == operationType);
             }
 
             var total = await query.CountAsync();
@@ -252,6 +267,9 @@ namespace AplikasiBanking8583.Controllers.ISO8583
                     responseCode = t.ResponseCode,
                     mti = t.MTI,
                     iso8583Raw = t.Iso8583MessageRaw,
+                    transactionCategory = t.TransactionCategory,
+                    operationType = t.OperationType,
+                    responseMessage = t.ResponseMessage,
                     date = t.TransactionDate
                 })
                 .ToListAsync();

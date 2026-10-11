@@ -1,0 +1,49 @@
+name: Daily Update
+
+on:
+  schedule:
+    # Run daily at 01:00 UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  daily-update:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Check for changes
+      id: changes
+      run: |
+        echo "Checking for uncommitted changes..."
+        git add -A
+        if git diff --cached --quiet; then
+          echo "no_changes=true" >> $GITHUB_OUTPUT
+          echo "No changes to commit"
+        else
+          echo "no_changes=false" >> $GITHUB_OUTPUT
+          echo "Changes detected"
+        fi
+
+    - name: Commit and push daily update
+      if: steps.changes.outputs.no_changes == 'false'
+      env:
+        GIT_AUTHOR_NAME: github-actions[bot]
+        GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+        GIT_COMMITTER_NAME: github-actions[bot]
+        GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
+      run: |
+        git add -A
+        git commit -m "daily update" || echo "No commit needed"
+        git push origin main
