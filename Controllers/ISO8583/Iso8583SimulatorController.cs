@@ -53,7 +53,10 @@ namespace AplikasiBanking8583.Controllers.ISO8583
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "SETOR",
+                ResponseMessage = "Setor tunai berhasil"
             };
 
             _context.Transactions.Add(transaction);
@@ -114,7 +117,10 @@ namespace AplikasiBanking8583.Controllers.ISO8583
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "TARIK",
+                ResponseMessage = "Tarik tunai berhasil"
             };
 
             _context.Transactions.Add(transaction);
@@ -183,7 +189,10 @@ namespace AplikasiBanking8583.Controllers.ISO8583
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "TRANSFER",
+                ResponseMessage = $"Transfer berhasil ke {toAccount.AccountNumber}. Saldo baru: Rp {fromAccount.Balance:N2}"
             };
 
             var inTransaction = new Transaction
@@ -198,7 +207,10 @@ namespace AplikasiBanking8583.Controllers.ISO8583
                 Rrn = isoResponse.GetString(37),
                 ResponseCode = "00",
                 MTI = "0200/0210",
-                Iso8583MessageRaw = isoResponse.ToIso8583String()
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "TRANSFER",
+                ResponseMessage = $"Transfer diterima dari {fromAccount.AccountNumber}. Saldo baru: Rp {toAccount.Balance:N2}"
             };
 
             _context.Transactions.Add(outTransaction);
@@ -525,6 +537,120 @@ namespace AplikasiBanking8583.Controllers.ISO8583
                 timestamp = DateTime.Now
             });
         }
+
+        [HttpPost("simulate-reversal")]
+        [ProducesResponseType(typeof(object), 200)]
+        [ProducesResponseType(typeof(object), 400)]
+        [ProducesResponseType(typeof(object), 404)]
+        public async Task<IActionResult> SimulateReversal([FromBody] SimulateReversalRequest request)
+        {
+            var originalTransaction = await _context.Transactions
+                .Include(t => t.Account)
+                .FirstOrDefaultAsync(t => t.Rrn == request.Rrn || t.Stan == request.OriginalStan);
+
+            if (originalTransaction == null)
+            {
+                return NotFound(new { error = "Transaksi asli tidak ditemukan" });
+            }
+
+            var account = await _context.Accounts.FirstOrDefaultAsync(a => a.AccountNumber == request.AccountNumber);
+            if (account == null)
+            {
+                return NotFound(new { error = "Rekening tidak ditemukan" });
+            }
+
+            var stan = Iso8583TransactionBuilder.GenerateSTAN();
+            var isoRequest = Iso8583TransactionBuilder.BuildReversalMessage(originalTransaction.Stan, originalTransaction.Rrn, TerminalId);
+
+            var reversalAmount = Math.Abs(originalTransaction.Amount);
+            var responseCode = "00";
+            decimal newBalance = account.Balance;
+
+            switch (originalTransaction.OperationType)
+            {
+                case "SETOR":
+                    newBalance = account.Balance - reversalAmount;
+                    if (newBalance < 0)
+                    {
+                        responseCode = "51";
+                    }
+                    else
+                    {
+                        account.Balance = newBalance;
+                    }
+                    break;
+                case "TARIK":
+                    newBalance = account.Balance + reversalAmount;
+                    account.Balance = newBalance;
+                    break;
+                case "TRANSFER":
+                    var transferTx = await _context.Transactions
+                        .Include(t => t.Account)
+                        .FirstOrDefaultAsync(t => t.Rrn == originalTransaction.Rrn && t.TransactionType == "Transfer Masuk");
+                    if (transferTx != null)
+                    {
+                        var toAccount = await _context.Accounts.FirstOrDefaultAsync(a => a.Id == transferTx.AccountId);
+                        if (toAccount != null && toAccount.Balance >= reversalAmount)
+                        {
+                            account.Balance += reversalAmount;
+                            toAccount.Balance -= reversalAmount;
+                            newBalance = account.Balance;
+                        }
+                        else
+                        {
+                            responseCode = "51";
+                            newBalance = account.Balance;
+                        }
+                    }
+                    else
+                    {
+                        responseCode = "12";
+                    }
+                    break;
+                default:
+                    return BadRequest(new { error = $"Reversal tidak didukung untuk operasi: {originalTransaction.OperationType}" });
+            }
+
+            var isoResponse = Iso8583TransactionBuilder.BuildReversalResponse(isoRequest, responseCode);
+
+            var reversalTransaction = new Transaction
+            {
+                AccountId = account.Id,
+                TransactionType = "Reversal",
+                Amount = reversalAmount,
+                Description = $"Reversal untuk transaksi {originalTransaction.TransactionType} (RRN: {originalTransaction.Rrn})",
+                TransactionDate = DateTime.Now,
+                Stan = stan,
+                Rrn = isoResponse.GetString(37),
+                ResponseCode = responseCode,
+                MTI = "0420/0430",
+                Iso8583MessageRaw = isoResponse.ToIso8583String(),
+                TransactionCategory = "FINANCIAL",
+                OperationType = "REVERSAL",
+                ResponseMessage = responseCode == "00" ? "Reversal berhasil" : "Reversal gagal"
+            };
+
+            _context.Transactions.Add(reversalTransaction);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Reversal berhasil",
+                accountNumber = account.AccountNumber,
+                originalRrn = originalTransaction.Rrn,
+                originalStan = originalTransaction.Stan,
+                originalAmount = originalTransaction.Amount,
+                originalOperationType = originalTransaction.OperationType,
+                reversalAmount = reversalAmount,
+                newBalance = account.Balance,
+                iso8583Request = isoRequest.ToIso8583String(),
+                iso8583Response = isoResponse.ToIso8583String(),
+                stan = stan,
+                rrn = isoResponse.GetString(37),
+                responseCode = responseCode,
+                timestamp = DateTime.Now
+            });
+        }
     }
 
     public class SimulateBalanceInquiryRequest
@@ -567,5 +693,12 @@ namespace AplikasiBanking8583.Controllers.ISO8583
         public string ToAccountNumber { get; set; } = string.Empty;
         public decimal Amount { get; set; }
         public string? Description { get; set; }
+    }
+
+    public class SimulateReversalRequest
+    {
+        public string AccountNumber { get; set; } = string.Empty;
+        public string OriginalStan { get; set; } = string.Empty;
+        public string? Rrn { get; set; }
     }
 }
