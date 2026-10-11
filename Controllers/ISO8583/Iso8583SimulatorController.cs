@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using AplikasiBanking8583.Models;
 using AplikasiBanking8583.Models.ISO8583;
-using System.Text;
 
 namespace AplikasiBanking8583.Controllers.ISO8583
 {
